@@ -52,7 +52,7 @@ pub trait IWorld<T> {
     fn register_namespace(ref self: T, namespace: ByteArray);
 
     fn register_model(ref self: T, class_hash: ClassHash);
-    fn upgrade_model(ref self: T, class_hash: ClassHash);
+    fn upgrade_model(ref self: T, selector: felt252, class_hash: ClassHash);
 
     fn deploy_contract(ref self: T, salt: felt252, class_hash: ClassHash) -> ContractAddress;
     fn upgrade_contract(ref self: T, class_hash: ClassHash) -> ClassHash;
@@ -73,7 +73,6 @@ pub trait IWorld<T> {
     );
     fn delete_entity(ref self: T, model_selector: felt252, index: ModelIndex, layout: Layout);
 
-    fn base(self: @T) -> ClassHash;
     fn resource(self: @T, selector: felt252) -> Resource;
 
     /// In Dojo, there are 2 levels of authorization: `owner` and `writer`.
@@ -107,11 +106,6 @@ pub trait IUpgradeableWorld<T> {
     fn upgrade(ref self: T, new_class_hash: ClassHash);
 }
 
-#[starknet::interface]
-pub trait IWorldProvider<T> {
-    fn world(self: @T) -> IWorldDispatcher;
-}
-
 #[starknet::contract]
 pub mod world {
     use core::array::{ArrayTrait, SpanTrait};
@@ -140,16 +134,17 @@ pub mod world {
 
     use dojo::world::errors;
     use dojo::world::config::{Config, IConfig};
-    use dojo::contract::upgradeable::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+    use dojo::components::upgradeable::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
     use dojo::contract::{IContractDispatcher, IContractDispatcherTrait};
     use dojo::world::update::{
         IUpgradeableState, IFactRegistryDispatcher, IFactRegistryDispatcherTrait, StorageUpdate,
         ProgramOutput
     };
     use dojo::model::{
-        Model, IModelDispatcher, IModelDispatcherTrait, Layout, ResourceMetadata,
-        ResourceMetadataTrait, metadata
+        Model, IModelDispatcher, IModelDispatcherTrait, Layout, LayoutCompareTrait,
+        ResourceMetadata, ResourceMetadataTrait, metadata
     };
+    use dojo::model::introspect::{ModelTy, Ty, ModelTyCompareTrait};
     use dojo::storage;
     use dojo::utils::{
         entity_id_from_keys, bytearray_hash, Descriptor, DescriptorTrait, IDescriptorDispatcher,
@@ -252,11 +247,8 @@ pub mod world {
 
     #[derive(Drop, starknet::Event, Debug, PartialEq)]
     pub struct ModelUpgraded {
-        pub name: ByteArray,
-        pub namespace: ByteArray,
         pub class_hash: ClassHash,
         pub address: ContractAddress,
-        pub prev_address: ContractAddress,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -304,7 +296,6 @@ pub mod world {
 
     #[storage]
     struct Storage {
-        contract_base: ClassHash,
         nonce: usize,
         models_salt: usize,
         resources: Map::<felt252, Resource>,
@@ -326,9 +317,8 @@ pub mod world {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, contract_base: ClassHash) {
+    fn constructor(ref self: ContractState) {
         let creator = starknet::get_tx_info().unbox().account_contract_address;
-        self.contract_base.write(contract_base);
 
         self.resources.write(WORLD, Resource::World);
         self
@@ -574,17 +564,24 @@ pub mod world {
             );
         }
 
-        fn upgrade_model(ref self: ContractState, class_hash: ClassHash) {
-            let salt = self.models_salt.read();
-
-            let (new_contract_address, _) = starknet::syscalls::deploy_syscall(
-                class_hash, salt.into(), [].span(), false,
+        /// Upgrades an already deployed model associated with the world.
+        ///
+        /// # Arguments
+        ///
+        /// * `selector` - The selector of the model to upgrade.
+        /// * `class_hash` - The new class hash of the model.
+        ///
+        fn upgrade_model(ref self: ContractState, selector: felt252, class_hash: ClassHash) {
+            // Using a library call is not safe as arbitrary code is executed.
+            // But deploying the contract we can check the new layout and schema of the model.
+            // If a new syscall supports calling library code with safety checks, we could switch
+            // back to using it. But for now, this is the safest option even if it's more expensive.
+            let (new_model_address, _) = starknet::syscalls::deploy_syscall(
+                class_hash, starknet::get_tx_info().unbox().transaction_hash, [].span(), false,
             )
                 .unwrap_syscall();
 
-            self.models_salt.write(salt + 1);
-
-            let new_descriptor = DescriptorTrait::from_contract_assert(new_contract_address);
+            let new_descriptor = DescriptorTrait::from_contract_assert(new_model_address);
 
             if !self.is_namespace_registered(new_descriptor.namespace_hash()) {
                 panic_with_byte_array(
@@ -594,12 +591,27 @@ pub mod world {
 
             self.assert_caller_permissions(new_descriptor.selector(), Permission::Owner);
 
-            let mut prev_address = core::num::traits::Zero::<ContractAddress>::zero();
-
             // If the namespace or name of the model have been changed, the descriptor
             // will be different, hence not upgradeable.
             match self.resources.read(new_descriptor.selector()) {
-                Resource::Model((model_address, _)) => { prev_address = model_address; },
+                Resource::Model((
+                    model_address, _
+                )) => {
+                    self.assert_model_is_upgradeable(selector, model_address, new_model_address);
+
+                    IUpgradeableDispatcher { contract_address: new_model_address }
+                        .upgrade(class_hash);
+                    self
+                        .resources
+                        .write(
+                            selector,
+                            Resource::Model((new_model_address, new_descriptor.namespace_hash()))
+                        );
+
+                    EventEmitter::emit(
+                        ref self, ModelUpgraded { class_hash, address: new_model_address }
+                    );
+                },
                 Resource::Unregistered => {
                     panic_with_byte_array(
                         @errors::model_not_registered(
@@ -614,24 +626,6 @@ pub mod world {
                     )
                 )
             };
-
-            self
-                .resources
-                .write(
-                    new_descriptor.selector(),
-                    Resource::Model((new_contract_address, new_descriptor.namespace_hash()))
-                );
-
-            EventEmitter::emit(
-                ref self,
-                ModelUpgraded {
-                    name: new_descriptor.name().clone(),
-                    namespace: new_descriptor.namespace().clone(),
-                    prev_address,
-                    address: new_contract_address,
-                    class_hash,
-                }
-            );
         }
 
         /// Registers a namespace in the world.
@@ -675,15 +669,8 @@ pub mod world {
         ) -> ContractAddress {
             let caller = get_caller_address();
 
-            let (contract_address, _) = deploy_syscall(
-                self.contract_base.read(), salt, [].span(), false
-            )
+            let (contract_address, _) = deploy_syscall(class_hash, salt, [].span(), false)
                 .unwrap_syscall();
-
-            // To ensure the dojo contract has world dispatcher injected, the base contract
-            // is being upgraded with the dojo contract logic.
-            let upgradeable_dispatcher = IUpgradeableDispatcher { contract_address };
-            upgradeable_dispatcher.upgrade(class_hash);
 
             let descriptor = DescriptorTrait::from_contract_assert(contract_address);
 
@@ -755,6 +742,14 @@ pub mod world {
                 );
 
                 IUpgradeableDispatcher { contract_address }.upgrade(class_hash);
+
+                self
+                    .resources
+                    .write(
+                        new_descriptor.selector(),
+                        Resource::Contract((contract_address, new_descriptor.namespace_hash()))
+                    );
+
                 EventEmitter::emit(
                     ref self, ContractUpgraded { class_hash, address: contract_address }
                 );
@@ -899,15 +894,6 @@ pub mod world {
                     @errors::resource_conflict(@format!("{model_selector}"), @"model")
                 );
             }
-        }
-
-        /// Gets the base contract class hash.
-        ///
-        /// # Returns
-        ///
-        /// * `ClassHash` - The class_hash of the contract_base contract.
-        fn base(self: @ContractState) -> ClassHash {
-            self.contract_base.read()
         }
 
         /// Gets resource data from its selector.
@@ -1132,6 +1118,50 @@ pub mod world {
             panic_with_byte_array(
                 @format!("{} does NOT have {} role on {}", caller_name, permission, resource_name)
             )
+        }
+
+        /// Panics if a model is not upgradable with the provided new class hash.
+        ///
+        /// Upgradable means:
+        /// - the version of the model must be incremented by 1,
+        /// - the layout type must remain the same (Struct or Fixed),
+        /// - existing fields cannot be changed or moved inside the model,
+        /// - new fields can only be appended at the end of the model.
+        ///
+        /// # Arguments
+        ///   * `model_selector` - the selector of the model.
+        ///   * `model_address` - the address of the current model.
+        ///   * `new_model_address` - the address of the newly deployed model.
+        ///
+        fn assert_model_is_upgradeable(
+            self: @ContractState,
+            model_selector: felt252,
+            model_address: ContractAddress,
+            new_model_address: ContractAddress
+        ) {
+            let model = IModelDispatcher { contract_address: model_address };
+            let old_layout = model.layout();
+            let old_schema = model.schema();
+            let old_version = model.version();
+
+            let new_model = IModelDispatcher { contract_address: new_model_address };
+            let new_layout = new_model.layout();
+            let new_schema = new_model.schema();
+            let new_version = new_model.version();
+
+            if new_version != old_version + 1 {
+                panic_with_byte_array(
+                    @errors::invalid_model_version_upgrade(model_selector, old_version + 1)
+                )
+            }
+
+            if !new_layout.is_same_type_of(@old_layout) {
+                panic_with_byte_array(@errors::invalid_model_layout_upgrade(model_selector));
+            }
+
+            if !new_schema.is_an_upgrade_of(@old_schema) {
+                panic_with_byte_array(@errors::invalid_model_schema_upgrade(model_selector));
+            }
         }
 
         /// Indicates if the provided namespace is already registered

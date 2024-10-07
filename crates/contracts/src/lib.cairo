@@ -1,15 +1,17 @@
+pub mod components {
+    pub mod world_provider;
+    pub mod upgradeable;
+}
+
 pub mod contract {
-    mod base_contract;
-    pub use base_contract::base;
     pub mod contract;
     pub use contract::{IContract, IContractDispatcher, IContractDispatcherTrait};
-    pub mod upgradeable;
 }
 
 pub mod model {
     pub mod introspect;
     pub mod layout;
-    pub use layout::{Layout, FieldLayout};
+    pub use layout::{Layout, FieldLayout, LayoutCompareTrait};
 
     pub mod model;
     pub use model::{
@@ -62,10 +64,8 @@ pub mod world {
     pub(crate) mod errors;
 
     mod world_contract;
-    pub use world_contract::{
-        world, IWorld, IWorldDispatcher, IWorldDispatcherTrait, IWorldProvider,
-        IWorldProviderDispatcher, IWorldProviderDispatcherTrait, Resource,
-    };
+    pub use world_contract::{world, IWorld, IWorldDispatcher, IWorldDispatcherTrait, Resource};
+
     pub(crate) use world_contract::{
         IUpgradeableWorld, IUpgradeableWorldDispatcher, IUpgradeableWorldDispatcherTrait
     };

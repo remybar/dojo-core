@@ -222,3 +222,85 @@ pub fn drop_all_events(address: ContractAddress) {
         };
     }
 }
+
+/// Note: These models must remain private to be able to redefine them
+/// in `resources.cairo` test file, to test model upgrade.
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooNameChanged {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooBadLayoutType {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberRemoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberAddedButRemoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberAddedButMoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberAddedButSameVersion {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberAdded {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128
+}
+
+pub fn deploy_world_for_model_upgrades() -> IWorldDispatcher {
+    spawn_test_world(
+        ["dojo"].span(),
+        [
+            foo::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_name_changed::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_bad_layout_type::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_member_removed::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_member_added_but_moved::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_member_added_but_removed::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_member_added_but_same_version::TEST_CLASS_HASH.try_into().unwrap(),
+            foo_member_added::TEST_CLASS_HASH.try_into().unwrap(),
+        ].span()
+    )
+}
+

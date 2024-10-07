@@ -3,8 +3,7 @@ use core::traits::TryInto;
 
 use starknet::ClassHash;
 
-use dojo::contract::base;
-use dojo::contract::upgradeable::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
+use dojo::components::upgradeable::{IUpgradeableDispatcher, IUpgradeableDispatcherTrait};
 use dojo::utils::test::{spawn_test_world};
 use dojo::world::{IWorldDispatcher, IWorldDispatcherTrait};
 
@@ -54,7 +53,8 @@ pub trait IQuantumLeap<T> {
 #[starknet::contract]
 pub mod test_contract_upgrade {
     use dojo::contract::IContract;
-    use dojo::world::{IWorldDispatcher, IWorldDispatcherTrait, IWorldProvider};
+    use dojo::components::world_provider::IWorldProvider;
+    use dojo::world::{IWorldDispatcher, IWorldDispatcherTrait};
 
     #[storage]
     struct Storage {}

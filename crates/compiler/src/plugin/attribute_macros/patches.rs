@@ -25,15 +25,31 @@ pub const CONTRACT_PATCH: &str = "
                     use dojo::world;
                     use dojo::world::IWorldDispatcher;
                     use dojo::world::IWorldDispatcherTrait;
-                    use dojo::world::IWorldProvider;
+                    use dojo::components::world_provider::{IWorldProvider, WorldProviderComponent};
+                    use dojo::components::upgradeable::upgradeable;
                     use dojo::contract::IContract;
                     use starknet::storage::{
                         StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess, \
                      StoragePointerWriteAccess
                     };
 
-                    component!(path: dojo::contract::upgradeable::upgradeable, storage: \
-                     upgradeable, event: UpgradeableEvent);
+                    component!(path: WorldProviderComponent, storage: world_provider, event: WorldProviderEvent);
+                    component!(path: upgradeable, storage: upgradeable, event: UpgradeableEvent);
+
+                    #[abi(embed_v0)]
+                    impl WorldProviderImpl = WorldProviderComponent::WorldProviderImpl<ContractState>;
+                    impl WorldProviderInternalImpl = WorldProviderComponent::InternalImpl<ContractState>;
+                    
+                    #[abi(embed_v0)]
+                    impl UpgradableImpl = upgradeable::UpgradableImpl<ContractState>;
+                    
+
+                    // TODO: to remove to allow developers to write their own constructor.
+                    // But `self.world_provider.initializer()` must be called in their constructor.
+                    #[constructor]
+                    fn constructor(ref self: ContractState) {
+                        self.world_provider.initializer();
+                    }
 
                     #[abi(embed_v0)]
                     pub impl ContractImpl of IContract<ContractState> {
@@ -61,17 +77,6 @@ pub const CONTRACT_PATCH: &str = "
                             $contract_selector$
                         }
                     }
-
-                    #[abi(embed_v0)]
-                    impl WorldProviderImpl of IWorldProvider<ContractState> {
-                        fn world(self: @ContractState) -> IWorldDispatcher {
-                            self.world_dispatcher.read()
-                        }
-                    }
-
-                    #[abi(embed_v0)]
-                    impl UpgradableImpl = \
-                     dojo::contract::upgradeable::upgradeable::UpgradableImpl<ContractState>;
 
                     $body$
                 }
@@ -415,6 +420,16 @@ pub impl $type_name$ModelImpl of dojo::model::Model<$type_name$> {
     }
 
     #[inline(always)]
+    fn schema() -> dojo::model::introspect::ModelTy {
+        if let dojo::model::introspect::Ty::Struct(s) = dojo::model::introspect::Introspect::<$type_name$>::ty() {
+            s
+        }
+        else {
+            panic!(\"Model `$type_name$`: invalid schema.\")
+        }
+    }
+
+    #[inline(always)]
     fn packed_size() -> Option<usize> {
         dojo::model::layout::compute_packed_size(Self::layout())
     }
@@ -464,8 +479,39 @@ pub mod $contract_name$ {
     use super::$type_name$;
     use super::I$contract_name$;
 
+    use dojo::components::world_provider::{IWorldProvider, WorldProviderComponent};
+    use dojo::components::upgradeable::upgradeable;
+
+    component!(path: WorldProviderComponent, storage: world_provider, event: WorldProviderEvent);
+    component!(path: upgradeable, storage: upgradeable, event: UpgradeableEvent);
+
+    #[abi(embed_v0)]
+    impl WorldProviderImpl = WorldProviderComponent::WorldProviderImpl<ContractState>;
+    impl WorldProviderInternalImpl = WorldProviderComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl UpgradableImpl = upgradeable::UpgradableImpl<ContractState>;
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        WorldProviderEvent: WorldProviderComponent::Event,
+        UpgradeableEvent: upgradeable::Event,
+    }
+
     #[storage]
-    struct Storage {}
+    struct Storage {
+        #[substorage(v0)]
+        world_provider: WorldProviderComponent::Storage,
+
+        #[substorage(v0)]
+        upgradeable: upgradeable::Storage,
+    }
+
+    #[constructor]
+    fn constructor(ref self: ContractState) {
+        self.world_provider.initializer();
+    }
 
     #[abi(embed_v0)]
     impl DojoModelImpl of dojo::model::IModel<ContractState>{
@@ -509,8 +555,8 @@ pub mod $contract_name$ {
             dojo::model::Model::<$type_name$>::layout()
         }
 
-        fn schema(self: @ContractState) -> dojo::model::introspect::Ty {
-            dojo::model::introspect::Introspect::<$type_name$>::ty()
+        fn schema(self: @ContractState) -> dojo::model::introspect::ModelTy {
+            dojo::model::Model::<$type_name$>::schema()
         }
     }
 

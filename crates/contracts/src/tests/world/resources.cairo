@@ -10,9 +10,78 @@ use dojo::world::world::{
 use dojo::contract::{IContractDispatcher, IContractDispatcherTrait};
 
 use dojo::tests::helpers::{
-    deploy_world, drop_all_events, Foo, foo, Buzz, buzz, test_contract, buzz_contract
+    deploy_world, deploy_world_for_model_upgrades, drop_all_events, Foo, foo, Buzz, buzz,
+    test_contract, buzz_contract
 };
 use dojo::utils::test::spawn_test_world;
+
+#[derive(Copy, Drop, Serde, Debug, IntrospectPacked)]
+#[dojo::model(version: 2)]
+pub struct FooBadLayoutType {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model(version: 2)]
+struct FooNameChanged {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+}
+
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model(version: 2)]
+struct FooMemberRemoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub b: u128,
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model(version: 2)]
+struct FooMemberAddedButRemoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub b: u128,
+    pub c: u256,
+    pub d: u256
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model(version: 2)]
+struct FooMemberAddedButMoved {
+    #[key]
+    pub caller: ContractAddress,
+    pub b: u128,
+    pub a: felt252,
+    pub c: u256
+}
+
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model]
+struct FooMemberAddedButSameVersion {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+    pub c: u256
+}
+
+#[derive(Copy, Drop, Serde, Debug)]
+#[dojo::model(version: 2)]
+struct FooMemberAdded {
+    #[key]
+    pub caller: ContractAddress,
+    pub a: felt252,
+    pub b: u128,
+    pub c: u256
+}
 
 #[test]
 fn test_set_metadata_world() {
@@ -168,55 +237,176 @@ fn test_register_model_for_namespace_writer() {
 fn test_upgrade_model_from_model_owner() {
     let bob = starknet::contract_address_const::<0xb0b>();
 
-    let world = deploy_world();
-    world.grant_owner(Model::<Foo>::namespace_hash(), bob);
+    let world = deploy_world_for_model_upgrades();
+    world.grant_owner(Model::<FooMemberAdded>::selector(), bob);
 
     starknet::testing::set_account_contract_address(bob);
     starknet::testing::set_contract_address(bob);
-    world.register_model(foo::TEST_CLASS_HASH.try_into().unwrap());
 
     drop_all_events(world.contract_address);
 
-    world.upgrade_model(foo::TEST_CLASS_HASH.try_into().unwrap());
+    world
+        .upgrade_model(
+            Model::<FooMemberAdded>::selector(),
+            foo_member_added::TEST_CLASS_HASH.try_into().unwrap()
+        );
 
     let event = starknet::testing::pop_log::<ModelUpgraded>(world.contract_address);
 
-    assert(event.is_some(), 'no ModelRegistered event');
+    assert(event.is_some(), 'no ModelUpgraded event');
     let event = event.unwrap();
-    assert(event.name == Model::<Foo>::name(), 'bad model name');
-    assert(event.namespace == Model::<Foo>::namespace(), 'bad model namespace');
-    assert(event.class_hash == foo::TEST_CLASS_HASH.try_into().unwrap(), 'bad model class_hash');
     assert(
-        event.address != core::num::traits::Zero::<ContractAddress>::zero(),
-        'bad model prev address'
+        event.class_hash == foo_member_added::TEST_CLASS_HASH.try_into().unwrap(),
+        'bad model class_hash'
+    );
+    assert(
+        event.address != core::num::traits::Zero::<ContractAddress>::zero(), 'bad model address'
     );
 
-    assert(world.is_owner(Model::<Foo>::selector(), bob), 'bob is not the owner');
+    assert(world.is_owner(Model::<FooMemberAdded>::selector(), bob), 'bob is not the owner');
+}
+
+#[test]
+fn test_upgrade_model() {
+    let world = deploy_world_for_model_upgrades();
+
+    drop_all_events(world.contract_address);
+
+    world
+        .upgrade_model(
+            Model::<FooMemberAdded>::selector(),
+            foo_member_added::TEST_CLASS_HASH.try_into().unwrap()
+        );
+
+    let event = starknet::testing::pop_log::<ModelUpgraded>(world.contract_address);
+
+    assert(event.is_some(), 'no ModelUpgraded event');
+    let event = event.unwrap();
+    assert(
+        event.class_hash == foo_member_added::TEST_CLASS_HASH.try_into().unwrap(),
+        'bad model class_hash'
+    );
+    assert(
+        event.address != core::num::traits::Zero::<ContractAddress>::zero(), 'bad model address'
+    );
 }
 
 #[test]
 #[should_panic(
     expected: (
-        "Account `659918` does NOT have OWNER role on namespace `dojo`", 'ENTRYPOINT_FAILED',
+        "Invalid new layout to upgrade the model `3299332835749357934986569383926439331000812010239905600952804594672861482231`",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_bad_layout_type() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<FooBadLayoutType>::selector(),
+            foo_bad_layout_type::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+#[test]
+#[should_panic(
+    expected: (
+        "Invalid new schema to upgrade the model `3123252206139358744730647958636922105676576163624049771737508399526017186883`",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_name_change() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<Foo>::selector(), foo_name_changed::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+#[test]
+#[should_panic(
+    expected: (
+        "Invalid new schema to upgrade the model `991779734441782832082403572095809709808010858956594544283871161035940786254`",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_member_removed() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<FooMemberRemoved>::selector(),
+            foo_member_removed::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+#[test]
+#[should_panic(
+    expected: (
+        "Invalid new schema to upgrade the model `832347970429487891546414803397849087808560440584474009458460185937208465364`",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_member_added_but_removed() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<FooMemberAddedButRemoved>::selector(),
+            foo_member_added_but_removed::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+#[test]
+#[should_panic(
+    expected: (
+        "The new model version of `1624956305639059314433508277897382957139753261232513354727598365317619941481` should be 2",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_member_added_but_same_version() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<FooMemberAddedButSameVersion>::selector(),
+            foo_member_added_but_same_version::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+
+#[test]
+#[should_panic(
+    expected: (
+        "Invalid new schema to upgrade the model `24285692591026114610735893315325215980821705916443621541163513530524539878`",
+        'ENTRYPOINT_FAILED',
+    )
+)]
+fn test_upgrade_model_with_member_moved() {
+    let world = deploy_world_for_model_upgrades();
+    world
+        .upgrade_model(
+            Model::<FooMemberAddedButMoved>::selector(),
+            foo_member_added_but_moved::TEST_CLASS_HASH.try_into().unwrap()
+        );
+}
+
+#[test]
+#[should_panic(
+    expected: (
+        "Account `659918` does NOT have OWNER role on model (or its namespace) `dojo-FooMemberAdded`",
+        'ENTRYPOINT_FAILED',
     )
 )]
 fn test_upgrade_model_from_model_writer() {
-    let bob = starknet::contract_address_const::<0xb0b>();
     let alice = starknet::contract_address_const::<0xa11ce>();
 
-    let world = deploy_world();
-    // dojo namespace is registered by the deploy_world function.
-    world.register_model(foo::TEST_CLASS_HASH.try_into().unwrap());
-    world.grant_owner(Model::<Foo>::namespace_hash(), bob);
-    world.grant_writer(Model::<Foo>::namespace_hash(), alice);
+    let world = deploy_world_for_model_upgrades();
 
-    starknet::testing::set_account_contract_address(bob);
-    starknet::testing::set_contract_address(bob);
-    world.upgrade_model(foo::TEST_CLASS_HASH.try_into().unwrap());
+    world.grant_writer(Model::<Foo>::selector(), alice);
 
     starknet::testing::set_account_contract_address(alice);
     starknet::testing::set_contract_address(alice);
-    world.register_model(foo::TEST_CLASS_HASH.try_into().unwrap());
+    world
+        .upgrade_model(
+            Model::<Foo>::selector(), foo_member_added::TEST_CLASS_HASH.try_into().unwrap()
+        );
 }
 
 #[test]

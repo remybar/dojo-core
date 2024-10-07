@@ -262,7 +262,7 @@ impl DojoContract {
         };
 
         let world_line_node = if was_world_injected {
-            RewriteNode::Text("let world = self.world_dispatcher.read();".to_string())
+            RewriteNode::Text("let world = self.world();".to_string())
         } else {
             RewriteNode::empty()
         };
@@ -319,7 +319,8 @@ impl DojoContract {
             #[event]
             #[derive(Drop, starknet::Event)]
             enum Event {
-                UpgradeableEvent: dojo::contract::upgradeable::upgradeable::Event,
+                WorldProviderEvent: dojo::components::world_provider::WorldProviderComponent::Event,
+                UpgradeableEvent: dojo::components::upgradeable::upgradeable::Event,
                 $variants$
             }
             ",
@@ -334,7 +335,8 @@ impl DojoContract {
             #[event]
             #[derive(Drop, starknet::Event)]
             enum Event {
-                UpgradeableEvent: dojo::contract::upgradeable::upgradeable::Event,
+                WorldProviderEvent: dojo::components::world_provider::WorldProviderComponent::Event,
+                UpgradeableEvent: dojo::components::upgradeable::upgradeable::Event,
             }
             "
             .to_string(),
@@ -360,9 +362,11 @@ impl DojoContract {
             "
             #[storage]
             struct Storage {
-                world_dispatcher: IWorldDispatcher,
                 #[substorage(v0)]
-                upgradeable: dojo::contract::upgradeable::upgradeable::Storage,
+                world_provider: dojo::components::world_provider::WorldProviderComponent::Storage,
+                
+                #[substorage(v0)]
+                upgradeable: dojo::components::upgradeable::upgradeable::Storage,
                 $members$
             }
             ",
@@ -376,9 +380,11 @@ impl DojoContract {
             "
             #[storage]
             struct Storage {
-                world_dispatcher: IWorldDispatcher,
                 #[substorage(v0)]
-                upgradeable: dojo::contract::upgradeable::upgradeable::Storage,
+                world_provider: dojo::components::world_provider::WorldProviderComponent::Storage,
+                
+                #[substorage(v0)]
+                upgradeable: dojo::components::upgradeable::upgradeable::Storage,
             }
             "
             .to_string(),
@@ -461,7 +467,7 @@ impl DojoContract {
     /// Rewrites function declaration by:
     ///  * adding `self` parameter if missing,
     ///  * removing `world` if present as first parameter (self excluded),
-    ///  * adding `let world = self.world_dispatcher.read();` statement at the beginning of the
+    ///  * adding `let world = self.world();` statement at the beginning of the
     ///    function to restore the removed `world` parameter.
     ///  * if `has_generate_trait` is true, the implementation containing the function has the
     ///    #[generate_trait] attribute.
@@ -502,7 +508,7 @@ impl DojoContract {
         };
 
         let world_line_node = if was_world_injected {
-            RewriteNode::Text("let world = self.world_dispatcher.read();".to_string())
+            RewriteNode::Text("let world = self.world();".to_string())
         } else {
             RewriteNode::empty()
         };

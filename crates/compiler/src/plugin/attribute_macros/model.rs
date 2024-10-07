@@ -62,16 +62,7 @@ fn get_model_version(
     match arg_value {
         Expr::Literal(ref value) => {
             if let Ok(value) = value.text(db).parse::<u8>() {
-                if value <= DEFAULT_MODEL_VERSION {
-                    value
-                } else {
-                    diagnostics.push(PluginDiagnostic {
-                        message: format!("dojo::model version {} not supported", value),
-                        stable_ptr: arg_value.stable_ptr().untyped(),
-                        severity: Severity::Error,
-                    });
-                    DEFAULT_MODEL_VERSION
-                }
+                value
             } else {
                 diagnostics.push(PluginDiagnostic {
                     message: format!(
@@ -272,19 +263,10 @@ impl DojoModel {
         let model_name_hash = naming::compute_bytearray_hash(&model_name);
         let model_namespace_hash = naming::compute_bytearray_hash(&model_namespace);
 
-        let (model_version, model_selector) = match parameters.version {
-            0 => (
-                RewriteNode::Text("0".to_string()),
-                RewriteNode::Text(format!("\"{model_name}\"")),
-            ),
-            _ => (
-                RewriteNode::Text(DEFAULT_MODEL_VERSION.to_string()),
-                RewriteNode::Text(
-                    naming::compute_selector_from_hashes(model_namespace_hash, model_name_hash)
-                        .to_string(),
-                ),
-            ),
-        };
+        let model_version = RewriteNode::Text(parameters.version.to_string());
+        let model_selector = RewriteNode::Text(
+            naming::compute_selector_from_hashes(model_namespace_hash, model_name_hash).to_string(),
+        );
 
         let mut members: Vec<Member> = vec![];
         let mut members_values: Vec<RewriteNode> = vec![];

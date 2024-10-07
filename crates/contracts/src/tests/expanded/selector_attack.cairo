@@ -6,16 +6,43 @@ pub mod attacker_contract {
     use dojo::world;
     use dojo::world::IWorldDispatcher;
     use dojo::world::IWorldDispatcherTrait;
-    use dojo::world::IWorldProvider;
+    use dojo::components::world_provider::{IWorldProvider, WorldProviderComponent};
+    use dojo::components::upgradeable::upgradeable;
     use dojo::contract::IContract;
     use starknet::storage::{
         StorageMapReadAccess, StorageMapWriteAccess, StoragePointerReadAccess,
         StoragePointerWriteAccess
     };
 
+    component!(path: WorldProviderComponent, storage: world_provider, event: WorldProviderEvent);
+    component!(path: upgradeable, storage: upgradeable, event: UpgradeableEvent);
+
+    #[abi(embed_v0)]
+    impl WorldProviderImpl =
+        WorldProviderComponent::WorldProviderImpl<ContractState>;
+    impl WorldProviderInternalImpl = WorldProviderComponent::InternalImpl<ContractState>;
+
+    #[abi(embed_v0)]
+    impl UpgradableImpl = upgradeable::UpgradableImpl<ContractState>;
+
+    #[event]
+    #[derive(Drop, starknet::Event)]
+    enum Event {
+        WorldProviderEvent: WorldProviderComponent::Event,
+        UpgradeableEvent: upgradeable::Event,
+    }
+
     #[storage]
     struct Storage {
-        world_dispatcher: IWorldDispatcher,
+        #[substorage(v0)]
+        world_provider: dojo::components::world_provider::WorldProviderComponent::Storage,
+        #[substorage(v0)]
+        upgradeable: dojo::components::upgradeable::upgradeable::Storage,
+    }
+
+    #[constructor]
+    fn constructor(ref self: ContractState) {
+        self.world_provider.initializer();
     }
 
     #[abi(embed_v0)]
@@ -43,13 +70,6 @@ pub mod attacker_contract {
         fn selector(self: @ContractState) -> felt252 {
             // Targetting a resource that exists in an other namespace.
             selector_from_tag!("dojo-Foo")
-        }
-    }
-
-    #[abi(embed_v0)]
-    impl WorldProviderImpl of IWorldProvider<ContractState> {
-        fn world(self: @ContractState) -> IWorldDispatcher {
-            self.world_dispatcher.read()
         }
     }
 }
@@ -102,8 +122,8 @@ pub mod attacker_model {
             dojo::model::Layout::Fixed([].span())
         }
 
-        fn schema(self: @ContractState) -> dojo::model::introspect::Ty {
-            dojo::model::introspect::Ty::Primitive('felt252')
+        fn schema(self: @ContractState) -> dojo::model::introspect::ModelTy {
+            dojo::model::introspect::ModelTy { name: 'm1', attrs: [].span(), children: [].span() }
         }
     }
 }

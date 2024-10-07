@@ -8,7 +8,7 @@ use core::byte_array::ByteArray;
 use core::poseidon::poseidon_hash_span;
 use core::serde::Serde;
 
-use dojo::model::introspect::{Introspect, Ty, Struct, Member};
+use dojo::model::introspect::{Introspect, Ty, Struct, Member, ModelTy};
 use dojo::model::{Model, ModelIndex, Layout, FieldLayout};
 use dojo::utils;
 use dojo::world::{IWorldDispatcher, IWorldDispatcherTrait};
@@ -160,6 +160,15 @@ pub impl ResourceMetadataModel of Model<ResourceMetadata> {
     }
 
     #[inline(always)]
+    fn schema() -> ModelTy {
+        if let Ty::Struct(s) = Introspect::<ResourceMetadata>::ty() {
+            s
+        } else {
+            panic!("Model `ResourceMetadata`: invalid schema.")
+        }
+    }
+
+    #[inline(always)]
     fn packed_size() -> Option<usize> {
         Option::None
     }
@@ -198,7 +207,7 @@ pub mod resource_metadata {
     use super::ResourceMetadata;
     use super::ResourceMetadataModel;
 
-    use dojo::model::introspect::{Introspect, Ty};
+    use dojo::model::introspect::{Introspect, Ty, ModelTy};
     use dojo::model::Layout;
 
     #[storage]
@@ -237,8 +246,8 @@ pub mod resource_metadata {
     }
 
     #[external(v0)]
-    fn schema(self: @ContractState) -> Ty {
-        Introspect::<ResourceMetadata>::ty()
+    fn schema(self: @ContractState) -> ModelTy {
+        ResourceMetadataModel::schema()
     }
 
     #[external(v0)]
