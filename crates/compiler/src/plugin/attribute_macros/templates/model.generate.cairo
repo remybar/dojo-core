@@ -1,73 +1,61 @@
-#[derive($derive_tags$)]
+$derive_entity$
 pub struct $model_type$Entity {
     __id: felt252, // private field
     $members_values$
 } 
 
-type $model_type$KeyType = $key_type$;
+pub type $model_type$KeyType = $key_type$;
 
-pub impl $model_type$KeyParser of dojo::model::model::KeyParser<$model_type$, $model_type$KeyType>{
-    #[inline(always)]
-    fn parse_key(self: @$model_type$) -> $model_type$KeyType {
+pub impl $model_type$IndexParser of dojo::model::IndexParser<$model_type$, $key_type$> {
+    fn key(self: @$model_type$) -> $key_type$ {
         $keys_to_tuple$
     }
 }
 
-impl $model_type$EntityKey of dojo::model::entity::EntityKey<$model_type$Entity, $model_type$KeyType> {
-}
-
 // Impl to get the static definition of a model
-pub mod $model_type_snake$_definition {
-    use super::$model_type$;
-    pub impl $model_type$DefinitionImpl<T> of dojo::model::ModelDefinition<T>{
-        #[inline(always)]
-        fn version() -> u8 {
-            $model_version$
-        }
-       
-        #[inline(always)]
-        fn selector() -> felt252 {
-            $model_selector$
-        }
-        
-        #[inline(always)]
-        fn name_hash() -> felt252 {
-            $model_name_hash$
-        }
-    
-        #[inline(always)]
-        fn namespace_hash() -> felt252 {
-            $model_namespace_hash$
-        }
-    
-        #[inline(always)]
-        fn name() -> ByteArray {
-            "$model_type$"
-        }
-        
-        #[inline(always)]
-        fn namespace() -> ByteArray {
-            "$model_namespace$"
-        }
-        
-        #[inline(always)]
-        fn tag() -> ByteArray {
-            "$model_tag$"
-        }
-    
-        #[inline(always)]
-        fn layout() -> dojo::meta::Layout {
-            dojo::meta::Introspect::<$model_type$>::layout()
-        }
+pub impl $model_type$Definition of dojo::model::ModelDefinition<$model_type$>{
+    #[inline(always)]
+    fn version() -> u8 {
+        $model_version$
     }
     
+    #[inline(always)]
+    fn selector() -> felt252 {
+        $model_selector$
+    }
+    
+    #[inline(always)]
+    fn name_hash() -> felt252 {
+        $model_name_hash$
+    }
+
+    #[inline(always)]
+    fn namespace_hash() -> felt252 {
+        $model_namespace_hash$
+    }
+
+    #[inline(always)]
+    fn name() -> ByteArray {
+        "$model_type$"
+    }
+    
+    #[inline(always)]
+    fn namespace() -> ByteArray {
+        "$model_namespace$"
+    }
+    
+    #[inline(always)]
+    fn tag() -> ByteArray {
+        "$model_tag$"
+    }
+
+    #[inline(always)]
+    fn layout() -> dojo::meta::Layout {
+        dojo::meta::Introspect::<$model_type$>::layout()
+    }
 }
 
-
-pub impl $model_type$Definition = $model_type_snake$_definition::$model_type$DefinitionImpl<$model_type$>;
-pub impl $model_type$EntityDefinition = $model_type_snake$_definition::$model_type$DefinitionImpl<$model_type$Entity>;
-
-pub impl $model_type$ModelParser of dojo::model::model::ModelParser<$model_type$>{
+pub impl $model_type$DojoSerde of dojo::model::DojoSerde<$model_type$>{
     fn serialize_keys(self: @$model_type$) -> Span<felt252> {
         let mut serialized = core::array::ArrayTrait::new();
         $serialized_keys$
@@ -80,30 +68,23 @@ pub impl $model_type$ModelParser of dojo::model::model::ModelParser<$model_type$
     }
 } 
 
-pub impl $model_type$EntityParser of dojo::model::entity::EntityParser<$model_type$Entity>{
-    fn parse_id(self: @$model_type$Entity) -> felt252 {
-        *self.__id
+pub impl $model_type$EntityDojoSerde of dojo::model::DojoSerde<$model_type$Entity>{
+    fn serialize_keys(self: @$model_type$Entity) -> Span<felt252> {
+        [*self.__id].span()
     }
     fn serialize_values(self: @$model_type$Entity) -> Span<felt252> {
         let mut serialized = core::array::ArrayTrait::new();
         $serialized_values$
         core::array::ArrayTrait::span(@serialized)
     }
-}
+} 
 
-
-pub impl $model_type$ModelImpl = dojo::model::model::ModelImpl<$model_type$>;
-pub impl $model_type$Store = dojo::model::model::ModelStoreImpl<$model_type$>;
-
-pub impl $model_type$EntityImpl = dojo::model::entity::EntityImpl<$model_type$Entity>;
-pub impl $model_type$EntityStore = dojo::model::entity::EntityStoreImpl<$model_type$Entity>;
-
+pub impl $model_type$Model = dojo::model::ModelImpl<$model_type$, $key_type$, $model_type$Entity>;
 
 #[generate_trait]
-pub impl $model_type$MembersStoreImpl of $model_type$MembersStore {
+pub impl $model_type$Members of $model_type$MembersStore {
 $field_accessors$
 }
-
 
 #[starknet::interface]
 pub trait I$model_type$<T> {
@@ -115,7 +96,7 @@ pub mod $model_type_snake$ {
     use super::$model_type$;
     use super::I$model_type$;
     use super::$model_type$Definition;
-    use super::$model_type$ModelImpl;
+    use super::$model_type$Model;
     #[storage]
     struct Storage {}
 
@@ -172,10 +153,3 @@ pub mod $model_type_snake$ {
         }
     }
 }
-
-
-#[cfg(target: "test")]
-pub impl $model_type$ModelTestImpl = dojo::model::model::ModelTestImpl<$model_type$>;
-
-#[cfg(target: "test")]
-pub impl $model_type$ModelEntityTestImpl = dojo::model::entity::ModelEntityTestImpl<$model_type$Entity>;

@@ -8,7 +8,7 @@ use core::byte_array::ByteArray;
 use core::poseidon::poseidon_hash_span;
 use core::serde::Serde;
 
-use dojo::model::{ModelIndex, model::{ModelImpl, ModelParser, KeyParser}};
+use dojo::model::{ModelIndex, ModelImpl, IndexParser, DojoSerde};
 use dojo::meta::introspect::{Introspect, Ty, Struct, Member};
 use dojo::meta::{Layout, FieldLayout};
 use dojo::utils;
@@ -29,6 +29,12 @@ pub fn initial_class_hash() -> starknet::ClassHash {
 pub struct ResourceMetadata {
     // #[key]
     pub resource_id: felt252,
+    pub metadata_uri: ByteArray,
+}
+
+#[derive(Drop, Serde, PartialEq, Clone, Debug)]
+pub struct ResourceMetadataEntity {
+    pub __id: felt252,
     pub metadata_uri: ByteArray,
 }
 
@@ -74,15 +80,18 @@ pub impl ResourceMetadataDefinitionImpl of dojo::model::ModelDefinition<Resource
     }
 }
 
-
-pub impl ResourceMetadataModelKeyImpl of KeyParser<ResourceMetadata, felt252> {
-    #[inline(always)]
-    fn parse_key(self: @ResourceMetadata) -> felt252 {
+pub impl ResourceMetadataIndexParser of IndexParser<ResourceMetadata, felt252> {
+    fn key(self: @ResourceMetadata) -> felt252 {
         *self.resource_id
+    }
+
+    // TODO RBA: why ?
+    fn entity_id(self: @ResourceMetadata) -> felt252 {
+        dojo::utils::entity_id_from_key(@Self::key(self))
     }
 }
 
-pub impl ResourceMetadataModelParser of ModelParser<ResourceMetadata> {
+pub impl ResourceMetadataDojoSerdeImpl of DojoSerde<ResourceMetadata> {
     fn serialize_keys(self: @ResourceMetadata) -> Span<felt252> {
         [*self.resource_id].span()
     }
@@ -91,8 +100,16 @@ pub impl ResourceMetadataModelParser of ModelParser<ResourceMetadata> {
     }
 }
 
-pub impl ResourceMetadataModelImpl = ModelImpl<ResourceMetadata>;
+pub impl ResourceMetadataEntityDojoSerdeImpl of DojoSerde<ResourceMetadataEntity> {
+    fn serialize_keys(self: @ResourceMetadataEntity) -> Span<felt252> {
+        [*self.__id].span()
+    }
+    fn serialize_values(self: @ResourceMetadataEntity) -> Span<felt252> {
+        serialize_inline(self.metadata_uri)
+    }
+}
 
+pub impl ResourceMetadataModel = ModelImpl<ResourceMetadata, felt252, ResourceMetadataEntity>;
 
 pub impl ResourceMetadataIntrospect<> of Introspect<ResourceMetadata<>> {
     #[inline(always)]

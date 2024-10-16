@@ -2,77 +2,30 @@ pub mod models {
     use starknet::ContractAddress;
 
     #[derive(Drop, Serde)]
-    #[dojo::model(namespace: "ns1")]
-    pub struct UnmappedModel {
-        #[key]
-        pub id: u32,
-        pub data: u32,
-    }
-
-    #[derive(Drop, Serde)]
     #[dojo::model]
-    pub struct Position {
+    pub struct Attack {
         #[key]
         pub player: ContractAddress,
-        pub x: u32,
-        pub y: u32,
-    }
-
-    #[derive(Drop, Serde)]
-    #[dojo::model]
-    pub struct ModelA {
         #[key]
-        pub id: u32,
-        pub a: felt252,
-    }
-
-
-    #[derive(Drop, Serde)]
-    pub struct Point {
-        pub x: u32,
-        pub y: u32,
-    }
-}
-
-pub mod events {
-    use starknet::ContractAddress;
-
-    #[derive(Drop, Serde)]
-    #[dojo::event]
-    pub struct PositionUpdated {
-        #[key]
-        pub player: ContractAddress,
-        pub new_x: u32,
-        pub new_y: u32,
+        pub monster_id: u32,
+        pub damage: u32,
+        pub effect: u32,
     }
 }
 
 #[dojo::interface]
 pub trait IActions {
     fn spawn(ref world: IWorldDispatcher);
-    fn despawn(ref world: IWorldDispatcher);
-    fn move(ref world: IWorldDispatcher, new_x: u32, new_y: u32);
-    fn get_position(world: @IWorldDispatcher) -> models::Point;
-    fn get_x(world: @IWorldDispatcher) -> u32;
-    fn get_y(world: @IWorldDispatcher) -> u32;
 }
 
 #[dojo::contract]
 pub mod actions {
-    use dojo::model::ModelStore;
+    use dojo::model::{Index};
+    use dojo::utils::entity_id_from_keys;
     use super::{
         IActions,
-        models::{Position, PositionEntity, ModelA, UnmappedModel, PositionMembersStore, Point},
-        events::PositionUpdated
+        models::{Attack, AttackModel},
     };
-
-    #[derive(Drop, Serde)]
-    #[dojo::model]
-    pub struct ModelInContract {
-        #[key]
-        pub id: u32,
-        pub a: u8,
-    }
 
     #[constructor]
     fn constructor(ref self: ContractState, a: u32) {
@@ -84,55 +37,24 @@ pub mod actions {
         fn spawn(ref world: IWorldDispatcher) {
             let caller = starknet::get_caller_address();
 
-            let position = Position { player: caller, x: 1, y: 2 };
+            let key = (caller, 12);
 
-            world.set(@position);
-            let _position: Position = world.get(caller);
-            emit!(world, PositionUpdated { player: caller, new_x: 1, new_y: 2 });
+            let attack = AttackModel::get(@world, key);
+            let attack_entity = AttackModel::get_entity(@world, Index::Id(42));
+            let _ = AttackModel::get_entity(@world, Index::Key(key));
+
+            AttackModel::set(world, @attack);
+            AttackModel::update(world, @attack_entity);
+
+            AttackModel::delete(world, @attack);
+            AttackModel::delete_entity(world, @attack_entity);
+
+            AttackModel::delete_from_index(world, Index::Id(42));
+            AttackModel::delete_from_index(world, Index::Key(key));
+
+            let _ = AttackModel::get_damage(world, key);
+            let _ = AttackModel::get_damage_from_index(world, Index::id(42));
+            let _ = AttackModel::get_damage_from_index(world, Index::Key(key));
         }
-
-        fn despawn(ref world: IWorldDispatcher) {
-            let caller = starknet::get_caller_address();
-            ModelStore::<Position>::delete_from_key(world, caller);
-        }
-
-        fn move(ref world: IWorldDispatcher, new_x: u32, new_y: u32) {
-            let caller = starknet::get_caller_address();
-            let mut position: Position = world.get(caller);
-            position.x = new_x;
-            position.y = new_y;
-            world.set(@position);
-            emit!(world, PositionUpdated { player: caller, new_x, new_y });
-        }
-
-        fn get_position(world: @IWorldDispatcher) -> Point {
-            let caller = starknet::get_caller_address();
-            let entity: PositionEntity = world.get_entity(caller);
-            Point { x: entity.x, y: entity.y }
-        }
-
-        fn get_x(world: @IWorldDispatcher) -> u32 {
-            let caller = starknet::get_caller_address();
-            PositionMembersStore::get_x(@world, caller)
-        }
-
-        fn get_y(world: @IWorldDispatcher) -> u32 {
-            let caller = starknet::get_caller_address();
-            PositionMembersStore::get_y(@world, caller)
-        }
-    }
-}
-
-#[starknet::contract]
-pub mod sn_actions {
-    #[storage]
-    struct Storage {}
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_spawn_world_full() {
-        let _world = spawn_test_world!();
     }
 }

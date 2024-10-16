@@ -50,7 +50,7 @@ pub mod world {
     use dojo::meta::Layout;
     use dojo::event::{IEventDispatcher, IEventDispatcherTrait};
     use dojo::model::{
-        Model, IModelDispatcher, IModelDispatcherTrait, ResourceMetadata, metadata, ModelIndex
+        IndexParser, DojoSerde, Model, ModelDefinition, IModelDispatcher, IModelDispatcherTrait, ResourceMetadata, ResourceMetadataModel, metadata, ModelIndex
     };
     use dojo::storage;
     use dojo::utils::{
@@ -262,9 +262,9 @@ pub mod world {
         self
             .resources
             .write(
-                Model::<ResourceMetadata>::selector(),
+                ModelDefinition::<ResourceMetadata>::selector(),
                 Resource::Model(
-                    (metadata::initial_address(), Model::<ResourceMetadata>::namespace_hash())
+                    (metadata::initial_address(), ModelDefinition::<ResourceMetadata>::namespace_hash())
                 )
             );
         self.owners.write((WORLD, creator), true);
@@ -321,12 +321,12 @@ pub mod world {
     impl World of IWorld<ContractState> {
         fn metadata(self: @ContractState, resource_selector: felt252) -> ResourceMetadata {
             let mut values = storage::entity_model::read_model_entity(
-                Model::<ResourceMetadata>::selector(),
+                ModelDefinition::<ResourceMetadata>::selector(),
                 entity_id_from_keys([resource_selector].span()),
-                Model::<ResourceMetadata>::layout()
+                ModelDefinition::<ResourceMetadata>::layout()
             );
             let mut keys = [resource_selector].span();
-            match Model::<ResourceMetadata>::from_values(ref keys, ref values) {
+            match DojoSerde::<ResourceMetadata>::deserialize(ref keys, ref values) {
                 Option::Some(x) => x,
                 Option::None => panic!("Model `ResourceMetadata`: deserialization failed.")
             }
@@ -336,10 +336,10 @@ pub mod world {
             self.assert_caller_permissions(metadata.resource_id, Permission::Owner);
 
             storage::entity_model::write_model_entity(
-                metadata.instance_selector(),
-                metadata.entity_id(),
-                metadata.values(),
-                metadata.instance_layout()
+                ModelDefinition::<ResourceMetadata>::selector(),
+                IndexParser::<ResourceMetadata, felt252>::entity_id(@metadata),
+                DojoSerde::<ResourceMetadata>::serialize_values(@metadata),
+                ModelDefinition::<ResourceMetadata>::layout(),
             );
 
             self

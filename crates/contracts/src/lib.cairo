@@ -28,27 +28,15 @@ pub mod model {
     pub mod definition;
     pub use definition::{ModelIndex, ModelDefinition};
 
-    pub mod members;
-    pub use members::{MemberStore};
-
     pub mod model;
-    pub use model::{Model, ModelStore};
-
-    pub mod entity;
-    pub use entity::{Entity, EntityStore};
+    pub use model::{Model, Index, ModelImpl, IndexParser, DojoSerde, to_entity_id};
 
     pub mod interface;
     pub use interface::{IModel, IModelDispatcher, IModelDispatcherTrait};
 
     pub mod metadata;
-    pub use metadata::{ResourceMetadata, resource_metadata};
+    pub use metadata::{ResourceMetadata, ResourceMetadataModel, resource_metadata};
     pub(crate) use metadata::{initial_address, initial_class_hash};
-
-    #[cfg(target: "test")]
-    pub use model::{ModelTest};
-
-    #[cfg(target: "test")]
-    pub use entity::{ModelEntityTest};
 }
 
 pub(crate) mod storage {
@@ -102,33 +90,4 @@ pub mod world {
 
     mod world_contract;
     pub use world_contract::world;
-}
-
-#[cfg(test)]
-mod tests {
-    mod meta {
-        mod introspect;
-    }
-
-    mod model {
-        mod model;
-    }
-    mod storage {
-        mod database;
-        mod packing;
-        mod storage;
-    }
-    mod contract;
-    mod benchmarks;
-    mod expanded {
-        pub(crate) mod selector_attack;
-    }
-    mod helpers;
-    mod world {
-        mod acl;
-        mod entities;
-        mod resources;
-        mod world;
-    }
-    mod utils;
 }

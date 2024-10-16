@@ -27,8 +27,9 @@ use super::element::{
 };
 use super::DOJO_MODEL_ATTR;
 
-const MODEL_CODE_PATCH: &str = include_str!("./templates/model_store.generate.cairo");
-const MODEL_FIELD_CODE_STRING: &str = include_str!("./templates/model_field_store.generate.cairo");
+const MODEL_CODE_PATCH: &str = include_str!("./templates/model.generate.cairo");
+const MODEL_FIELD_CODE_PATCH: &str = include_str!("./templates/model_field.generate.cairo");
+
 type ModelParameters = CommonStructParameters;
 const ENTITY_DERIVE_IGNORE: [&str; 2] = [DOJO_INTROSPECT_DERIVE, DOJO_PACKED_DERIVE];
 
@@ -178,6 +179,11 @@ impl DojoModel {
             .filter(|&tag| !ENTITY_DERIVE_IGNORE.contains(&tag))
             .collect::<Vec<&str>>()
             .join(", ");
+        let derive_tags = if derive_tags.is_empty() {
+            String::new()
+        } else {
+            format!("#[derive({derive_tags})]")
+        };
 
         if !derive_attr_names.contains(&DOJO_INTROSPECT_DERIVE.to_string())
             && !derive_attr_names.contains(&DOJO_PACKED_DERIVE.to_string())
@@ -244,7 +250,7 @@ impl DojoModel {
                     "field_accessors".to_string(),
                     RewriteNode::new_modified(field_accessors),
                 ),
-                ("derive_tags".to_string(), RewriteNode::Text(derive_tags)),
+                ("derive_entity".to_string(), RewriteNode::Text(derive_tags)),
             ]),
         );
 
@@ -296,7 +302,7 @@ impl DojoModel {
 /// A [`RewriteNode`] containing accessors code.
 fn generate_field_accessors(model_type: String, member: &Member) -> RewriteNode {
     RewriteNode::interpolate_patched(
-        MODEL_FIELD_CODE_STRING,
+        MODEL_FIELD_CODE_PATCH,
         &UnorderedHashMap::from([
             ("model_type".to_string(), RewriteNode::Text(model_type)),
             (
